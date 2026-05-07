@@ -1,5 +1,7 @@
 # Model Card — govmodel/awb-classifier-v0.1
 
+🎮 **Live demo (geen install):** [huggingface.co/spaces/NoaberAI/govmodel-demo](https://huggingface.co/spaces/NoaberAI/govmodel-demo)
+
 ## Model details
 
 - **Naam**: govmodel-awb-classifier-v0.1

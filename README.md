@@ -4,6 +4,8 @@
 
 **Licentie:** EUPL-1.2 · **Contact:** [info@noaberai.nl](mailto:info@noaberai.nl) · **Status:** v0.1 — research baseline
 
+🎮 **Probeer 'm live (geen install nodig):** [huggingface.co/spaces/NoaberAI/govmodel-demo](https://huggingface.co/spaces/NoaberAI/govmodel-demo)
+
 ---
 
 ## Wat is dit?
@@ -34,6 +36,10 @@ Multilabel: een brief kan tegelijk **bezwaar én klacht** zijn (en die combinati
 
 ## Snel aan de slag
 
+**Geen install — direct in je browser:** [Live Gradio demo](https://huggingface.co/spaces/NoaberAI/govmodel-demo) — plak een burgerbrief, krijg meteen het Awb-type.
+
+**In je eigen Python (3 regels):**
+
 ```python
 from transformers import pipeline
 
@@ -47,6 +53,8 @@ text = "Hierbij teken ik bezwaar aan tegen uw besluit van 12 maart..."
 print(clf(text))
 # → [{'label': 'bezwaar', 'score': 0.91}, {'label': 'klacht', 'score': 0.04}, ...]
 ```
+
+**Via HuggingFace Inference API (geen Python nodig):** zie de "Inference API" widget rechts op de [model-pagina](https://huggingface.co/NoaberAI/govmodel-awb-classifier-v0.1).
 
 ## Installatie
 
