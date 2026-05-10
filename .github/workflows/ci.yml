@@ -42,9 +42,14 @@ jobs:
             src/govmodel/seeding.py \
             src/govmodel/errors.py \
             src/govmodel/llm_client.py \
+            src/govmodel/mining.py \
+            src/govmodel/calibration.py \
             src/govmodel/training/awb_dataset.py \
+            scripts/mine_hard_negatives.py \
             tests/test_api_smoke.py \
             tests/test_analytics.py \
             tests/test_inference_helpers.py \
             tests/test_seeding_and_logging.py \
-            tests/test_llm_client.py
+            tests/test_llm_client.py \
+            tests/test_mining.py \
+            tests/test_calibration.py

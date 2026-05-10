@@ -161,6 +161,16 @@
         <div id="confusionTable"></div>
       </div>
     </div>
+    <div class="row">
+      <div class="panel">
+        <h2>calibratie</h2>
+        <div id="calibration"></div>
+      </div>
+      <div class="panel">
+        <h2>betrouwbaarheid (model-confidence vs. menselijke instemming)</h2>
+        <div id="reliability"></div>
+      </div>
+    </div>
     <div class="panel">
       <h2>laatste voorspellingen</h2>
       <div id="recentTable"></div>
@@ -173,14 +183,60 @@
 
     async function load() {
       const w = document.getElementById("window").value;
-      const r = await fetch(`/api/analytics/summary?window_hours=${w}`);
-      if (!r.ok) {
+      const [sum, cal] = await Promise.all([
+        fetch(`/api/analytics/summary?window_hours=${w}`).then(r => r.ok ? r.json() : null),
+        fetch(`/api/analytics/calibration`).then(r => r.ok ? r.json() : null),
+      ]);
+      if (!sum) {
         document.getElementById("kpis").innerHTML =
-          `<div class="empty">kon analytics niet laden (${r.status})</div>`;
+          `<div class="empty">kon analytics niet laden</div>`;
         return;
       }
-      const d = await r.json();
-      render(d);
+      render(sum);
+      renderCalibration(cal);
+    }
+
+    function renderCalibration(c) {
+      const cal = document.getElementById("calibration");
+      const rel = document.getElementById("reliability");
+      if (!c || c.n_with_feedback === 0) {
+        cal.innerHTML = `<div class="empty">geen feedback ontvangen — stuur correcties via /api/classify/&lt;id&gt;/feedback om ECE te zien</div>`;
+        rel.innerHTML = `<div class="empty">geen data</div>`;
+        return;
+      }
+      const eceColor = c.ece < 0.05 ? "good" : c.ece < 0.15 ? "warn" : "bad";
+      cal.innerHTML = `
+        <table>
+          <tbody>
+            <tr><td>feedback-rijen</td><td>${fmt.format(c.n_with_feedback)}</td></tr>
+            <tr><td>ECE (lager = beter)</td><td><span class="pill ${eceColor}">${c.ece.toFixed(3)}</span></td></tr>
+            <tr><td>instemming-ratio</td><td>${pct(c.agreement_rate)}</td></tr>
+          </tbody>
+        </table>
+      `;
+      const max = Math.max(1, ...c.reliability.map(b => b.n));
+      rel.innerHTML = `
+        <table>
+          <thead><tr><th>bin</th><th>confidence</th><th>accuratie</th><th>n</th></tr></thead>
+          <tbody>
+            ${c.reliability.map(b => `
+              <tr>
+                <td>${b.lo.toFixed(2)}–${b.hi.toFixed(2)}</td>
+                <td>${pct(b.confidence)}</td>
+                <td>${pct(b.accuracy)}</td>
+                <td>
+                  <span class="pill ${b.n > 0 ? '' : 'empty'}">${b.n}</span>
+                  <span style="display:inline-block;margin-left:8px;vertical-align:middle;">
+                    <span class="bar-track" style="width:60px;display:inline-block;">
+                      <span class="bar" style="width:${(b.n / max) * 100}%;"></span>
+                    </span>
+                  </span>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
     }
 
     function kpiCard(label, value, sub) {

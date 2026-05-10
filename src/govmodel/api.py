@@ -32,6 +32,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from govmodel import analytics
+from govmodel.calibration import ece_from_log
 from govmodel.errors import GovmodelError, ModelLoadError
 from govmodel.inference import (
     DEFAULT_MODEL_ID,
@@ -160,6 +161,13 @@ async def feedback(request_id: str, req: FeedbackRequest) -> dict[str, Any]:
 @app.get("/api/analytics/summary")
 async def analytics_summary(window_hours: float = 24.0) -> dict[str, Any]:
     return analytics.summary(window_hours=window_hours)
+
+
+@app.get("/api/analytics/calibration")
+async def analytics_calibration() -> dict[str, Any]:
+    """ECE + reliability curve over (top_score, top_label == user_label)
+    pairs in the prediction log. Empty until feedback rows arrive."""
+    return ece_from_log(_prediction_logger.path)
 
 
 @app.get("/api/predictions", response_class=PlainTextResponse)
