@@ -27,6 +27,8 @@ from pathlib import Path
 # je alleen een exit-code zonder traceback)
 faulthandler.enable(file=sys.stderr)
 
+from govmodel.logging_setup import configure_logging
+from govmodel.seeding import seed_everything
 from govmodel.training.dataset import (
     label_distribution,
     load_all_examples,
@@ -73,11 +75,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    logging.basicConfig(
-        level=args.log_level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
+    configure_logging(level=args.log_level)
     logger = logging.getLogger("train_classifier")
+    seed_everything(args.seed)
 
     logger.info("Laden uit %d bron(nen): %s", len(args.inputs), args.inputs)
     examples = load_all_examples(args.inputs)

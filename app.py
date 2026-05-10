@@ -7,15 +7,30 @@ Voor lokaal draaien:
 Voor HuggingFace Spaces:
     Plaats dit bestand + requirements.txt in een Space-repo.
     HF Spaces detecteert Gradio automatisch.
+
+Logging (standaard naar logs/predictions.jsonl):
+    GOVMODEL_PREDICTION_LOG=path/to/log.jsonl  # override pad
+    GOVMODEL_LOG_RAW_TEXT=1                    # ook ruwe tekst loggen (privacy!)
+    GOVMODEL_ABSTAIN_THRESHOLD=0.20            # abstain als top-score < deze
 """
 
 from __future__ import annotations
 
-import gradio as gr
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import logging
+import os
 
-MODEL_ID = "NoaberAI/govmodel-awb-classifier-v0.1"
+import gradio as gr
+
+from govmodel.inference import (
+    ABSTAIN_THRESHOLD,
+    DEFAULT_MODEL_ID,
+    Classifier,
+    PredictionLogger,
+)
+from govmodel.logging_setup import configure_logging
+
+configure_logging()
+logger = logging.getLogger("govmodel.app")
 
 LABEL_DESCRIPTIONS = {
     "aanvraag": "Verzoek om beschikking (vergunning, voorziening, subsidie)",
@@ -37,55 +52,64 @@ EXAMPLES = [
     ["Hierbij dien ik mijn zienswijze in op het ter inzage gelegde ontwerp-bestemmingsplan 'De Hoek'. Mijn bezwaren: (1) verkeerstoename, (2) geluidsoverlast, (3) waardedaling woning."],
 ]
 
-
-print(f"Model laden: {MODEL_ID} ...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = model.to(device).eval()
-print(f"Model geladen op {device}.")
-
-id2label = model.config.id2label
-labels_in_order = [id2label[i] for i in range(len(id2label))]
+logger.info("starting app", extra={"model_id": DEFAULT_MODEL_ID})
+classifier = Classifier()
+prediction_logger = PredictionLogger()
 
 
 def classify(text: str, threshold: float = 0.5) -> tuple[dict, str]:
     if not text or not text.strip():
         return {}, "_(geen invoer)_"
 
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
-    with torch.no_grad():
-        logits = model(**inputs).logits[0].float().cpu()
-    probs = torch.sigmoid(logits).numpy()
+    pred = classifier.classify(text, threshold=threshold)
+    prediction_logger.log(pred, raw_text=text)
+    logger.info(
+        "classified",
+        extra={
+            "request_id": pred.request_id,
+            "top_label": pred.top_label,
+            "top_score": round(pred.top_score, 3),
+            "abstain": pred.abstain,
+            "latency_ms": round(pred.latency_ms, 1),
+        },
+    )
 
-    # Multilabel-output (boven threshold)
-    multilabel_results = {
-        labels_in_order[i]: float(probs[i])
-        for i in range(len(probs))
-    }
-
-    # Argmax single-label voor extra context
-    top_idx = int(probs.argmax())
-    top_label = labels_in_order[top_idx]
-    top_score = float(probs[top_idx])
-
-    above_threshold = [(lbl, p) for lbl, p in multilabel_results.items() if p >= threshold]
-    above_threshold.sort(key=lambda x: -x[1])
+    multilabel_results = pred.all_scores
 
     explanation_lines = []
-    explanation_lines.append(f"**Top single-label:** `{top_label}` ({top_score:.0%})")
-    explanation_lines.append(f"_{LABEL_DESCRIPTIONS.get(top_label, '')}_")
+    if pred.abstain:
+        explanation_lines.append(
+            f"⚠️ **Onvoldoende vertrouwen** — top-score `{pred.top_score:.0%}` "
+            f"ligt onder de abstain-drempel `{ABSTAIN_THRESHOLD:.0%}`."
+        )
+        explanation_lines.append("Aanbeveling: handmatige triage door medewerker.")
+        explanation_lines.append("")
+
+    explanation_lines.append(f"**Top single-label:** `{pred.top_label}` ({pred.top_score:.0%})")
+    explanation_lines.append(f"_{LABEL_DESCRIPTIONS.get(pred.top_label, '')}_")
     explanation_lines.append("")
-    if above_threshold:
-        explanation_lines.append(f"**Boven threshold {threshold}** ({len(above_threshold)} label{'s' if len(above_threshold) != 1 else ''}):")
-        for lbl, p in above_threshold:
+    if pred.above_threshold:
+        n = len(pred.above_threshold)
+        explanation_lines.append(
+            f"**Boven threshold {threshold}** ({n} label{'s' if n != 1 else ''}):"
+        )
+        for lbl, p in pred.above_threshold:
             explanation_lines.append(f"- `{lbl}` — {p:.0%}")
-    else:
-        explanation_lines.append(f"_Geen labels boven threshold {threshold}. Top suggestie: `{top_label}` ({top_score:.0%})._")
+    elif not pred.abstain:
+        explanation_lines.append(
+            f"_Geen labels boven threshold {threshold}. Top suggestie: "
+            f"`{pred.top_label}` ({pred.top_score:.0%})._"
+        )
 
     explanation_lines.append("")
+    explanation_lines.append(f"_request_id: `{pred.request_id}` · "
+                             f"latency: {pred.latency_ms:.0f} ms_")
+    explanation_lines.append("")
     explanation_lines.append("---")
-    explanation_lines.append("⚠️ Deze classifier is een **research baseline**. Output dient als advies, niet als besluit. Mens in the loop verplicht.")
+    explanation_lines.append(
+        "⚠️ Deze classifier is een **research baseline**. Output dient als "
+        "advies, niet als besluit. Mens in the loop verplicht."
+    )
 
     return multilabel_results, "\n".join(explanation_lines)
 
@@ -131,13 +155,15 @@ with gr.Blocks(title="govmodel — Awb-typering classifier", theme=gr.themes.Sof
     text_in.submit(classify, inputs=[text_in, threshold], outputs=[scores, explanation])
 
     gr.Markdown(
-        """
+        f"""
         ---
         ### Bekende beperkingen
         - **Klacht-detectie** werkt voor reguliere klachten; juridisch-complexe en meta-klachten zijn een v0.2-prioriteit.
         - **6 labels** (aanvraag, beroep, melding, zienswijze, informatieverzoek_3_11, vraag_overig)
           zijn nog **niet getoetst op echte burgerteksten** — alleen op handgeschreven en synthetic eval-sets.
         - Niet bedoeld voor automatische besluitvorming (AI Act *limited risk*).
+        - **Abstain-mechanisme:** als geen label boven {ABSTAIN_THRESHOLD:.0%} komt,
+          adviseert het model handmatige triage in plaats van een gok.
 
         Volledige model card: [`MODEL_CARD.md`](https://huggingface.co/NoaberAI/govmodel-awb-classifier-v0.1/blob/main/README.md)
         """

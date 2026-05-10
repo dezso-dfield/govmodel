@@ -96,44 +96,8 @@ def train_classifier(
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
     from transformers import get_linear_schedule_with_warmup
 
-    from govmodel.training.labels import LABEL_NAMES, encode_labels
-
-    class AwbDataset(TorchDataset):
-        """Pure-torch dataset — vermijdt HF datasets/pyarrow."""
-
-        def __init__(self, examples, tokenizer, max_length: int):
-            self.encodings = tokenizer(
-                [ex.text for ex in examples],
-                truncation=True,
-                max_length=max_length,
-                padding=False,
-            )
-            self.labels = [encode_labels(ex.labels) for ex in examples]
-
-        def __len__(self) -> int:
-            return len(self.labels)
-
-        def __getitem__(self, idx: int) -> dict:
-            return {
-                "input_ids": self.encodings["input_ids"][idx],
-                "attention_mask": self.encodings["attention_mask"][idx],
-                "labels": torch.tensor(self.labels[idx], dtype=torch.float),
-            }
-
-    def make_collate_fn(pad_token_id: int):
-        def collate(batch: list[dict]) -> dict:
-            max_len = max(len(item["input_ids"]) for item in batch)
-            input_ids = torch.tensor([
-                item["input_ids"] + [pad_token_id] * (max_len - len(item["input_ids"]))
-                for item in batch
-            ], dtype=torch.long)
-            attention_mask = torch.tensor([
-                item["attention_mask"] + [0] * (max_len - len(item["attention_mask"]))
-                for item in batch
-            ], dtype=torch.long)
-            labels = torch.stack([item["labels"] for item in batch])
-            return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
-        return collate
+    from govmodel.training.awb_dataset import AwbDataset, make_collate_fn
+    from govmodel.training.labels import LABEL_NAMES, encode_labels  # noqa: F401
 
     if use_bf16 is None:
         use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()

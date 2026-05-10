@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <title>govmodel · analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0e1116;
+      --panel: #161b22;
+      --panel-2: #1f262e;
+      --border: #2a313c;
+      --fg: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --good: #3fb950;
+      --warn: #d29922;
+      --bad: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    header .meta { color: var(--muted); font-size: 12px; }
+    main { padding: 18px 24px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .card .value { font-size: 26px; font-weight: 600; margin-top: 4px; }
+    .card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+    @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .panel h2 { margin: 0 0 10px 0; font-size: 14px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    .bar {
+      height: 8px;
+      background: var(--accent);
+      border-radius: 4px;
+      min-width: 2px;
+    }
+    .bar-track { background: var(--panel-2); border-radius: 4px; height: 8px; }
+    .pill {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: var(--panel-2);
+      color: var(--muted);
+    }
+    .pill.abstain { background: rgba(210, 153, 34, 0.18); color: var(--warn); }
+    .pill.high { background: rgba(63, 185, 80, 0.18); color: var(--good); }
+    .pill.low { background: rgba(248, 81, 73, 0.18); color: var(--bad); }
+    .controls { display: flex; gap: 8px; align-items: center; }
+    button {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:hover { border-color: var(--accent); }
+    select {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font: inherit;
+    }
+    .empty { color: var(--muted); padding: 20px; text-align: center; }
+    .timeline {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 80px;
+      padding-top: 8px;
+    }
+    .timeline .col {
+      flex: 1;
+      background: var(--accent);
+      border-radius: 2px 2px 0 0;
+      min-height: 2px;
+      opacity: 0.85;
+    }
+    .timeline .col:hover { opacity: 1; }
+    .latency { display: flex; gap: 18px; align-items: baseline; }
+    .latency .big { font-size: 22px; font-weight: 600; }
+    code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>govmodel · analytics</h1>
+      <div class="meta" id="meta">laden…</div>
+    </div>
+    <div class="controls">
+      <label class="meta" for="window">venster</label>
+      <select id="window">
+        <option value="1">1 u</option>
+        <option value="6">6 u</option>
+        <option value="24" selected>24 u</option>
+        <option value="168">7 d</option>
+      </select>
+      <button id="refresh">ververs</button>
+    </div>
+  </header>
+  <main>
+    <div class="grid" id="kpis"></div>
+    <div class="row">
+      <div class="panel">
+        <h2>verdeling Awb-typen</h2>
+        <div id="labelTable"></div>
+      </div>
+      <div class="panel">
+        <h2>vertrouwens-buckets</h2>
+        <div id="scoreTable"></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="panel">
+        <h2>volume per uur</h2>
+        <div class="timeline" id="timeline"></div>
+        <div id="timelineLabels" class="meta" style="margin-top:6px;"></div>
+      </div>
+      <div class="panel">
+        <h2>top verwarringen (model → mens)</h2>
+        <div id="confusionTable"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>laatste voorspellingen</h2>
+      <div id="recentTable"></div>
+    </div>
+  </main>
+
+  <script>
+    const fmt = new Intl.NumberFormat("nl-NL");
+    const pct = (x) => (x * 100).toFixed(1) + "%";
+
+    async function load() {
+      const w = document.getElementById("window").value;
+      const r = await fetch(`/api/analytics/summary?window_hours=${w}`);
+      if (!r.ok) {
+        document.getElementById("kpis").innerHTML =
+          `<div class="empty">kon analytics niet laden (${r.status})</div>`;
+        return;
+      }
+      const d = await r.json();
+      render(d);
+    }
+
+    function kpiCard(label, value, sub) {
+      return `<div class="card"><div class="label">${label}</div>` +
+             `<div class="value">${value}</div>` +
+             (sub ? `<div class="sub">${sub}</div>` : "") + `</div>`;
+    }
+
+    function render(d) {
+      document.getElementById("meta").textContent =
+        `log: ${d.log_path} · venster ${d.window_hours} u · ${fmt.format(d.in_window)} in venster`;
+
+      const acc = d.feedback_accuracy === null ? "–"
+        : pct(d.feedback_accuracy) + ` (${d.feedback_correct}/${d.feedback_correct + d.feedback_wrong})`;
+
+      document.getElementById("kpis").innerHTML = [
+        kpiCard("voorspellingen totaal", fmt.format(d.total_predictions)),
+        kpiCard("abstain-rate", pct(d.abstain_rate),
+                `${fmt.format(d.abstain_count)} routed-to-human`),
+        kpiCard("p50 latency", `${d.latency_ms.p50.toFixed(0)} ms`,
+                `p95 ${d.latency_ms.p95.toFixed(0)} ms`),
+        kpiCard("feedback-accuratesse", acc,
+                "stem op een voorspelling om dit te vullen"),
+      ].join("");
+
+      // Label table
+      const lt = document.getElementById("labelTable");
+      const labels = Object.entries(d.label_counts);
+      const maxLabel = Math.max(1, ...labels.map(([, n]) => n));
+      lt.innerHTML = labels.length === 0
+        ? `<div class="empty">geen data</div>`
+        : `<table><thead><tr><th>label</th><th>aantal</th><th></th></tr></thead><tbody>` +
+          labels.map(([lbl, n]) => `
+            <tr>
+              <td><code>${lbl}</code></td>
+              <td>${fmt.format(n)}</td>
+              <td><div class="bar-track"><div class="bar" style="width:${(n / maxLabel) * 100}%"></div></div></td>
+            </tr>`).join("") +
+          `</tbody></table>`;
+
+      // Score buckets
+      const sb = d.score_buckets;
+      const sbTotal = Math.max(1, Object.values(sb).reduce((a, b) => a + b, 0));
+      document.getElementById("scoreTable").innerHTML =
+        `<table><thead><tr><th>top-score</th><th>aantal</th><th>%</th></tr></thead><tbody>` +
+        Object.entries(sb).map(([range, n]) => `
+          <tr>
+            <td>${range === "<0.2" ? `<span class="pill low">${range}</span>` :
+                 range === ">=0.8" ? `<span class="pill high">${range}</span>` :
+                 `<span class="pill">${range}</span>`}</td>
+            <td>${fmt.format(n)}</td>
+            <td>${pct(n / sbTotal)}</td>
+          </tr>`).join("") +
+        `</tbody></table>`;
+
+      // Timeline
+      const tl = document.getElementById("timeline");
+      const tlLabels = document.getElementById("timelineLabels");
+      const max = Math.max(1, ...d.hourly.map(h => h.count));
+      tl.innerHTML = d.hourly.length === 0
+        ? `<div class="empty">geen voorspellingen in venster</div>`
+        : d.hourly.map(h => `
+            <div class="col" title="${h.bucket}: ${h.count}"
+                 style="height:${(h.count / max) * 100}%"></div>`).join("");
+      tlLabels.textContent = d.hourly.length === 0 ? ""
+        : `${d.hourly[0].bucket}  →  ${d.hourly[d.hourly.length - 1].bucket}`;
+
+      // Confusion
+      document.getElementById("confusionTable").innerHTML = d.top_confusions.length === 0
+        ? `<div class="empty">geen feedback ontvangen</div>`
+        : `<table><thead><tr><th>voorspeld</th><th>correct</th><th>n</th></tr></thead><tbody>` +
+          d.top_confusions.map(c => `
+            <tr>
+              <td><code>${c.predicted}</code></td>
+              <td><code>${c.user_label}</code></td>
+              <td>${c.n}</td>
+            </tr>`).join("") +
+          `</tbody></table>`;
+
+      // Recent
+      document.getElementById("recentTable").innerHTML = d.recent.length === 0
+        ? `<div class="empty">nog geen voorspellingen</div>`
+        : `<table><thead><tr><th>tijd</th><th>id</th><th>top</th><th>score</th><th>extra labels</th><th>latency</th></tr></thead><tbody>` +
+          d.recent.map(r => {
+            const extra = (r.above_threshold || [])
+              .filter(a => a[0] !== r.top_label)
+              .map(a => `<span class="pill">${a[0]} ${pct(a[1])}</span>`).join(" ");
+            const sc = r.abstain
+              ? `<span class="pill abstain">abstain ${pct(r.top_score)}</span>`
+              : r.top_score >= 0.8
+                ? `<span class="pill high">${pct(r.top_score)}</span>`
+                : `<span class="pill">${pct(r.top_score)}</span>`;
+            return `<tr>
+              <td>${(r.ts || "").replace("T", " ").replace("Z", "")}</td>
+              <td><code>${r.request_id}</code></td>
+              <td><code>${r.top_label}</code></td>
+              <td>${sc}</td>
+              <td>${extra || "–"}</td>
+              <td>${r.latency_ms.toFixed(0)} ms</td>
+            </tr>`;
+          }).join("") +
+          `</tbody></table>`;
+    }
+
+    document.getElementById("refresh").addEventListener("click", load);
+    document.getElementById("window").addEventListener("change", load);
+    load();
+    setInterval(load, 30_000);
+  </script>
+</body>
+</html>

@@ -59,48 +59,16 @@ def main() -> int:
     # Lazy imports
     import numpy as np
     import torch
-    from torch.utils.data import DataLoader, Dataset as TorchDataset
+    from torch.utils.data import DataLoader
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+    from govmodel.training.awb_dataset import AwbDataset, make_collate_fn as make_collate
     from govmodel.training.train import (
         compute_confusion,
         compute_metrics_multilabel,
         compute_with_thresholds,
         find_best_thresholds_per_class,
     )
-
-    class AwbDataset(TorchDataset):
-        def __init__(self, examples, tokenizer, max_length: int):
-            self.encodings = tokenizer(
-                [ex.text for ex in examples], truncation=True,
-                max_length=max_length, padding=False,
-            )
-            self.labels = [encode_labels(ex.labels) for ex in examples]
-
-        def __len__(self) -> int:
-            return len(self.labels)
-
-        def __getitem__(self, idx: int) -> dict:
-            return {
-                "input_ids": self.encodings["input_ids"][idx],
-                "attention_mask": self.encodings["attention_mask"][idx],
-                "labels": torch.tensor(self.labels[idx], dtype=torch.float),
-            }
-
-    def make_collate(pad_token_id: int):
-        def collate(batch):
-            max_len = max(len(it["input_ids"]) for it in batch)
-            input_ids = torch.tensor([
-                it["input_ids"] + [pad_token_id] * (max_len - len(it["input_ids"]))
-                for it in batch
-            ], dtype=torch.long)
-            attention_mask = torch.tensor([
-                it["attention_mask"] + [0] * (max_len - len(it["attention_mask"]))
-                for it in batch
-            ], dtype=torch.long)
-            labels = torch.stack([it["labels"] for it in batch])
-            return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
-        return collate
 
     logger.info("Model laden uit: %s", args.model)
     tokenizer = AutoTokenizer.from_pretrained(str(args.model))
