@@ -179,6 +179,50 @@ for the full mechanism.
 | Real Rechtspraak | Pulled via puller | Domain transfer |
 | Conformal calibration | Held-out subset of train | `calibration.conformal_thresholds()` |
 
+## Data tooling (`src/govmodel/data/`, `src/govmodel/eval/`)
+
+The `dezso_dev` branch adds a hygiene + augmentation + evaluation stack
+the next retrain inherits:
+
+| Tool | Purpose |
+|---|---|
+| `data.validate_examples` | Schema check against `LabeledExample`. Catches degenerate short texts, empty labels, invalid label names, unknown extra fields. |
+| `data.balance_report` | Per-label / per-source / multilabel-arity distribution + imbalance ratio. |
+| `data.exact_dedupe` | Whitespace + case-insensitive duplicate collapse. |
+| `data.near_dedupe` | Greedy 5-char shingle + Jaccard near-dedup (threshold configurable). |
+| `data.leakage_between` | Synthetic↔eval-set near-duplicate detector — the gate that stops `benchmark.py` from being inflated by memorised rows. |
+| `data.stratified_split` | Primary-label stratified train/val/test split so rare classes like `informatieverzoek_3_11` get test coverage. |
+| `data.standard_augmentations` | 9 deterministic Dutch-flavoured perturbations: typos at 3% / 8%, casing, ALL-CAPS emphasis spans (gov-specific), punctuation strip/double, NT2/B1 simplification, dialect / anglicism / Turkish-Arabic-loan swaps. |
+| `data.formal_to_informal` | Optional LLM-driven rewrite (lazy-loads `LLMClient`). Used for training augmentation, never for robustness eval. |
+| `data.meta_klacht.iter_prompts` | 8 scenarios × 5 styles prompt templates for the v0.2 meta-klacht synthetic batch (R&D item G2 from plan.md). |
+| `eval.evaluate_slice` | Per-tag F1 + optimal threshold + Δ-vs-default + macro/micro F1 + ECE + reliability curve. |
+| `eval.regression_gate` | CI gate: macro-F1 must not drop > `max_drop` on any shared slice. |
+
+Driver scripts:
+
+```
+python scripts/audit_dataset.py \
+    --inputs data/synthetic/v0.1.jsonl \
+    --eval-against data/eval/handwritten_realistic.jsonl \
+                   data/eval/rechtspraak.jsonl \
+    --out reports/audit-v0.1.json
+# exits 1 if leakage or blocking issues found
+
+python scripts/build_robustness_pack.py \
+    --in data/eval/handwritten_realistic.jsonl \
+    --out data/eval/robustness_pack.jsonl
+
+python scripts/evaluate_slices.py \
+    --checkpoint models/awb-classifier-v0.1 \
+    --slice handwritten_realistic=data/eval/handwritten_realistic.jsonl \
+    --slice handwritten_adversarial=data/eval/handwritten_adversarial.jsonl \
+    --slice rechtspraak=data/eval/rechtspraak.jsonl \
+    --slice robustness=data/eval/robustness_pack.jsonl \
+    --out reports/eval-2026-05-11 \
+    --gate-against reports/baseline/report.json \
+    --max-drop 0.05
+```
+
 ## Roadmap
 
 - Meta-klacht hand-crafted set (50–100 examples) for `klacht` F1.

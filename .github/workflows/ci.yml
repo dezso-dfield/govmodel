@@ -44,12 +44,21 @@ jobs:
             src/govmodel/llm_client.py \
             src/govmodel/mining.py \
             src/govmodel/calibration.py \
+            src/govmodel/data \
+            src/govmodel/eval \
             src/govmodel/training/awb_dataset.py \
             scripts/mine_hard_negatives.py \
+            scripts/audit_dataset.py \
+            scripts/build_robustness_pack.py \
+            scripts/evaluate_slices.py \
             tests/test_api_smoke.py \
             tests/test_analytics.py \
             tests/test_inference_helpers.py \
             tests/test_seeding_and_logging.py \
             tests/test_llm_client.py \
             tests/test_mining.py \
-            tests/test_calibration.py
+            tests/test_calibration.py \
+            tests/test_data_tools.py \
+            tests/test_data_augment.py \
+            tests/test_eval_harness.py \
+            tests/test_meta_klacht.py
